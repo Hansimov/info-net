@@ -1,7 +1,7 @@
 // This is a template for `endpoints.json`.
 // Replace the `endpoint`, `api_key` and `model` with your own ones,
 //   then create or rename to `endpoints.json`
-// Currently, "chat" and "retrieval" keys are mandatory,
+// Currently, "chat" and "index" keys are mandatory,
 //   as this project is for RAG.
 {
     "chat": {
@@ -9,7 +9,7 @@
         "api_key": "sk-xxxxx",
         "model": "gpt-4-0125-preview"
     },
-    "retrieval": {
+    "index": {
         "endpoint": "https://api.openai.com/v1",
         "api_key": "sk-xxxxx",
         "model": "gpt-3.5-turbo-0125"
