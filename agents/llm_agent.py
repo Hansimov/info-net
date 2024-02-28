@@ -2,21 +2,16 @@ import json
 from pathlib import Path
 from openai import OpenAI
 from utils.logger import logger, Runtimer
-from tiktoken import get_encoding as tiktoken_get_encoding
+from parsers.tokenizer import count_tokens
 
 
 class LLMAgent:
-    def __init__(self, system_prompt="", source="chat"):
+    def __init__(self, system_prompt="", task="chat"):
         self.system_prompt = system_prompt
-        self.source = source
-        self.tokenizer = tiktoken_get_encoding("cl100k_base")
-        self.init_endpoint_and_key_by_source()
+        self.task = task
+        self.init_endpoint_and_key_by_task()
 
-    def count_tokens(self, content):
-        tokens = self.tokenizer.encode(content)
-        return len(tokens)
-
-    def init_endpoint_and_key_by_source(self):
+    def init_endpoint_and_key_by_task(self):
         endpoints_json_path = Path(__file__).parents[1] / "configs" / "endpoints.json"
         if not endpoints_json_path.exists():
             raise FileNotFoundError(
@@ -25,7 +20,7 @@ class LLMAgent:
         with open(endpoints_json_path, "r") as rf:
             endpoints = json.load(rf)
 
-        llm_meta = endpoints[self.source]
+        llm_meta = endpoints[self.task]
 
         self.endpoint, self.api_key, self.model = list(
             map(llm_meta.get, ["endpoint", "api_key", "model"])
@@ -47,17 +42,17 @@ class LLMAgent:
         messages.append(self.content_to_message(role="user", content=prompt))
         return messages
 
-    def chat(self, prompt, temeperature=0.5, show_prompt=True):
+    def chat(self, prompt, temperature=0.5, show_prompt=True):
         timer = Runtimer(is_log=False)
         timer.start_time()
+        prompt_token_count = count_tokens(prompt)
+        system_prompt_token_count = count_tokens(self.system_prompt)
         if show_prompt:
-            prompt_token_count = self.count_tokens(prompt)
-            system_prompt_token_count = self.count_tokens(self.system_prompt)
             logger.note(f"User: {prompt} [{prompt_token_count} tokens]")
         response = self.client.chat.completions.create(
             model=self.model,
             messages=self.prompt_to_messages(prompt),
-            temperature=temeperature,
+            temperature=temperature,
             stream=True,
         )
         result = ""
@@ -70,7 +65,7 @@ class LLMAgent:
             elif choice.finish_reason == "stop":
                 timer.end_time()
                 elapsed_time_str = timer.time2str(timer.elapsed_time(), unit_sep="")
-                result_token_count = self.count_tokens(result)
+                result_token_count = count_tokens(result)
                 total_token_count = (
                     result_token_count + prompt_token_count + system_prompt_token_count
                 )
@@ -87,9 +82,9 @@ class LLMAgent:
 
 if __name__ == "__main__":
     agent = LLMAgent(
-        source="chat",
+        task="chat",
         system_prompt="You are InfoNet, an Information Source Tracing Neural Network which can find sources from given context for user questions. You are developped by Hansimov.",
     )
     agent.chat("Tell me your short name.", temeperature=0.1)
 
-    # python -m agents.llm_chatter
+    # python -m agents.llm_agent
