@@ -9,7 +9,7 @@ from markdownify import markdownify
 from termcolor import colored
 from tiktoken import get_encoding as tiktoken_get_encoding
 
-from constants.htmls import IGNORE_TAGS, IGNORE_CLASSES
+from constants.htmls import IGNORE_TAGS, IGNORE_CLASSES, IGNORE_WORDS
 from utils.logger import logger
 
 
@@ -22,15 +22,14 @@ class WebpageContentExtractor:
         token_count = len(tokens)
         return token_count
 
-    def html_to_markdown(self, html_str, ignore_links=True):
-        if ignore_links:
-            markdown_str = markdownify(html_str, strip=["a"])
-        else:
-            markdown_str = markdownify(html_str)
+    def html_to_markdown(self, html_str):
+        markdown_str = markdownify(
+            html_str, strip=["a"], wrap_width=120, heading_style="ATX"
+        )
         markdown_str = re.sub(r"\n{3,}", "\n\n", markdown_str)
 
         self.markdown_token_count = self.count_tokens(markdown_str)
-        logger.mesg(f'- Tokens: {colored(self.markdown_token_count,"light_green")}')
+        logger.mesg(f'  - Tokens: {colored(self.markdown_token_count,"light_green")}')
 
         self.markdown_str = markdown_str
 
@@ -75,7 +74,7 @@ class WebpageContentExtractor:
                 removed_element_counts += 1
 
         logger.mesg(
-            f"- Elements: "
+            f"  - Elements: "
             f'{colored(len(soup.find_all()),"light_green")} (Remained) / {colored(removed_element_counts,"light_red")} (Removed)'
         )
 
@@ -85,7 +84,7 @@ class WebpageContentExtractor:
         return self.html_str
 
     def extract(self, html_path, filter_elements=True):
-        logger.note(f"Extracting content from: {html_path}")
+        logger.note(f"> Extracting content from: {html_path}")
 
         if not Path(html_path).exists():
             logger.warn(f"File not found: {html_path}")
@@ -107,6 +106,10 @@ class WebpageContentExtractor:
             html_str = self.filter_elements_from_html(html_str)
 
         markdown_str = self.html_to_markdown(html_str)
+
+        for ignore_word in IGNORE_WORDS:
+            markdown_str = re.sub(ignore_word, "", markdown_str, flags=re.IGNORECASE)
+
         return markdown_str
 
 
