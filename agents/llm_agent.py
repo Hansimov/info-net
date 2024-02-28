@@ -42,7 +42,7 @@ class LLMAgent:
         messages.append(self.content_to_message(role="user", content=prompt))
         return messages
 
-    def chat(self, prompt, temperature=0.5, show_prompt=True):
+    def chat(self, prompt, temperature=0.5, max_tokens=None, show_prompt=True):
         timer = Runtimer(is_log=False)
         timer.start_time()
         prompt_token_count = count_tokens(prompt)
@@ -53,6 +53,7 @@ class LLMAgent:
             model=self.model,
             messages=self.prompt_to_messages(prompt),
             temperature=temperature,
+            max_tokens=max_tokens,
             stream=True,
         )
         result = ""
