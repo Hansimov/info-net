@@ -5,23 +5,37 @@ from utils.logger import logger
 
 class MarkdownChunker:
     def __init__(self):
-        self.sep = "=" * 4
+        self.sep = "=" * 6
+        self.chunk_sep = "=" * 3
 
-    def to_list(self, markdown_path):
-        with open(markdown_path, "r", encoding="utf-8") as rf:
-            markdown_str = rf.read()
+    def md_to_chunks_list(self, markdown_path=None, markdown_str=None):
+        if (not markdown_path) and (not markdown_str):
+            raise ValueError("Either markdown_path or markdown_str should be provided.")
+        if markdown_path:
+            with open(markdown_path, "r", encoding="utf-8") as rf:
+                markdown_str = rf.read()
         chunks = re.split(r"\n{2,}", markdown_str)
         chunks = [chunk for chunk in chunks if chunk.strip()]
         return chunks
 
-    def to_str(self, markdown_path):
-        chunk_sep = "=" * 8
-        chunks = self.to_list(markdown_path)
+    def chunks_to_str(self, chunks, offset=0):
         chunks_str = ""
-        for i, chunk in enumerate(chunks):
-            chunk_head = f"{self.sep} Chunk {i+1} {self.sep}"
-            chunks_str += f"{chunk_head}\n{chunk}\n\n"
-        chunks_str = f"{chunk_sep}\n{chunks_str}\n{chunk_sep}\n"
+        for idx, chunk in enumerate(chunks):
+            i = idx + offset
+            chunk_head = f"{self.chunk_sep} Chunk {i+1} Start {self.chunk_sep}"
+            chunk_tail = f"{self.chunk_sep} Chunk {i+1} End {self.chunk_sep}"
+            chunks_str += f"{chunk_head}\n{chunk}\n{chunk_tail}\n\n"
+        chunks_str = f"{self.sep}\n{chunks_str}\n{self.sep}\n"
+        return chunks_str
+
+    def md_to_chunks_str(self, markdown_path=None, markdown_str=None, offset=0):
+        chunks = self.md_to_chunks_list(
+            markdown_path=markdown_path, markdown_str=markdown_str
+        )
+        chunks_str = self.chunks_to_str(chunks, offset=offset)
+        txt_path = Path(markdown_path).with_suffix(".txt")
+        with open(txt_path, "w", encoding="utf-8") as wf:
+            wf.write(chunks_str)
         return chunks_str
 
 
