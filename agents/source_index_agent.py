@@ -13,21 +13,38 @@ class SourceIndexAgent:
         self.chunker = MarkdownChunker()
         self.jsoner = JSONExtractor()
 
-    def construct_prompt_with_context(self, query, chunks, offset=0, total_count=0):
+    def construct_prompt_with_context(
+        self,
+        query,
+        chunks,
+        offset=0,
+        total_count=0,
+        past_result="",
+    ):
         chunks_str = self.chunker.chunks_to_str(chunks, offset=offset)
-        chunk_info_prompt = f"{len(chunks)} chunks from {offset+1} to {offset+len(chunks)} of {total_count} chunks."
+        chunk_info_prompt = f"{len(chunks)} chunks (chunk {offset+1}-{offset+len(chunks)}) of {total_count} chunks"
         description_prompt = ""
-        task_prompt = "Your are chunk scanner and source index retriever. Your task is to retrieve all relevant and needed chunks to answer the query."
+        task_prompt = "Your are chunk scanner and source index retriever. Your task is to retrieve and recall all relevant chunks to answer the query."
         query_prompt = f"My query is: `{query}`."
-        output_format_prompt = 'Your 1st output should be query analysis and user intention recognition. Your 2nd output should be scanning chunk by chunk based on above analysis. Your 3rd output should be a json list ([]), starts from "```json", and ends with "```": The list items are indexes of chunks relevant to the query; Do not return non-relevant or too many; Return [] if no relevant chunk.'
+        output_format_prompt = 'Your 1st output should be query analysis and user intention recognition. Your 2nd output should be scanning chunk by chunk based on query-relation analysis. Your 3rd output should be a json list ([]), starts from "```json", and ends with "```": The list items are indexes of chunks relevant to the query; Do not return non-relevant or too many; Return [] if no relevant chunk.'
+
+        if past_result:
+            past_result_str = f"\nFYI, here are the retrived chunks of past scans:\n```\n{past_result}\n```"
+        else:
+            past_result_str = ""
+
         prompt = (
-            f"Here are {chunk_info_prompt}. {description_prompt} {task_prompt}\n"
+            f"{description_prompt} {task_prompt}\n"
             f"{query_prompt}\n"
-            f"{chunks_str}\n"
-            f"Above are {chunk_info_prompt}. Remember, {description_prompt} {task_prompt}\n"
+            f"{past_result_str}"
+            f"\nHere are {chunk_info_prompt}:\n"
+            f"\n{chunks_str}\n"
+            f"Above are {chunk_info_prompt}.\n"
+            f"Remember, {description_prompt} {task_prompt}\n"
             f"{output_format_prompt}\n"
             f"Remember, {query_prompt}\n"
         )
+
         return prompt
 
     def chat(self, prompt, filepath, show_prompt=True):
@@ -38,6 +55,7 @@ class SourceIndexAgent:
         chunks = self.chunker.md_to_chunks_list(markdown_path=filepath)
 
         indexes_and_chunks = []
+        past_result_str = ""
         chunk_num = 10
         for offset in range(0, len(chunks), chunk_num):
             chunks_part = chunks[offset : offset + chunk_num]
@@ -45,7 +63,11 @@ class SourceIndexAgent:
                 f"> Scanning chunks: [{offset+1}-{offset+len(chunks_part)}]/{len(chunks)}"
             )
             prompt_with_context = self.construct_prompt_with_context(
-                query=prompt, chunks=chunks_part, offset=offset, total_count=len(chunks)
+                query=prompt,
+                chunks=chunks_part,
+                offset=offset,
+                total_count=len(chunks),
+                # past_result=past_result_str,
             )
             response_content = self.llm.chat(
                 prompt_with_context,
@@ -56,11 +78,18 @@ class SourceIndexAgent:
             indexes = self.jsoner.to_obj(response_content)
             if indexes:
                 indexes_and_chunks_part = [
-                    {"index": index, "chunk": chunks[index - 1]}
+                    {"index": int(index), "chunk": chunks[int(index) - 1]}
                     for index in indexes
-                    if offset <= index - 1 < offset + chunk_num
+                    if offset <= int(index) - 1 < offset + chunk_num
                 ]
                 indexes_and_chunks.extend(indexes_and_chunks_part)
+                past_result_chunks = [item["chunk"] for item in indexes_and_chunks_part]
+                past_result_indexes = [
+                    item["index"] - 1 for item in indexes_and_chunks_part
+                ]
+                past_result_str += self.chunker.chunks_to_str(
+                    past_result_chunks, indexes=past_result_indexes
+                )
 
         indexes_and_chunks = sorted(indexes_and_chunks, key=lambda x: x["index"])
         related_indexes = [item["index"] for item in indexes_and_chunks]

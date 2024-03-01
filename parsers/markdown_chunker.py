@@ -5,8 +5,9 @@ from utils.logger import logger
 
 class MarkdownChunker:
     def __init__(self):
-        self.sep = "=" * 6
-        self.chunk_sep = "=" * 3
+        self.sep = ">" * 6
+        self.chunk_sep_head = "<" * 3
+        self.chunk_sep_tail = ">" * 3
 
     def md_to_chunks_list(self, markdown_path=None, markdown_str=None):
         if (not markdown_path) and (not markdown_str):
@@ -18,14 +19,20 @@ class MarkdownChunker:
         chunks = [chunk for chunk in chunks if chunk.strip()]
         return chunks
 
-    def chunks_to_str(self, chunks, offset=0):
+    def chunks_to_str(self, chunks, offset=0, indexes=None):
         chunks_str = ""
-        for idx, chunk in enumerate(chunks):
-            i = idx + offset
-            chunk_head = f"{self.chunk_sep} Chunk {i+1} Start {self.chunk_sep}"
-            chunk_tail = f"{self.chunk_sep} Chunk {i+1} End {self.chunk_sep}"
+        if not chunks:
+            return chunks_str
+        if not indexes:
+            indexes = list(range(offset, offset + len(chunks)))
+        for idx, chunk in zip(indexes, chunks):
+            chunk_head = (
+                f"{self.chunk_sep_head} Chunk {idx+1} Start {self.chunk_sep_tail}"
+            )
+            chunk_tail = f"{self.chunk_sep_head} {self.chunk_sep_tail}"
             chunks_str += f"{chunk_head}\n{chunk}\n{chunk_tail}\n\n"
-        chunks_str = f"{self.sep}\n{chunks_str}\n{self.sep}\n"
+        # chunks_str = f"{self.sep}\n{chunks_str}\n{self.sep}\n"
+        chunks_str = f"{chunks_str}"
         return chunks_str
 
     def md_to_chunks_str(self, markdown_path=None, markdown_str=None, offset=0):
