@@ -9,7 +9,7 @@ from parsers.json_extractor import JSONExtractor
 
 class SourceIndexAgent:
     def __init__(self):
-        self.llm = LLMAgent(task="index")
+        self.llm = LLMAgent(task="search")
         self.chunker = MarkdownChunker()
         self.jsoner = JSONExtractor()
 
@@ -17,9 +17,9 @@ class SourceIndexAgent:
         chunks_str = self.chunker.chunks_to_str(chunks, offset=offset)
         chunk_info_prompt = f"{len(chunks)} chunks from {offset+1} to {offset+len(chunks)} of {total_count} chunks."
         description_prompt = ""
-        task_prompt = "Your task is to find most related chunks to answer my query."
+        task_prompt = "Your are chunk scanner and source index retriever. Your task is to retrieve all relevant and needed chunks to answer the query."
         query_prompt = f"My query is: `{query}`."
-        output_format_prompt = 'The 1st output is your question analysis and chunks scanning. The 2nd output should be a json list ([]), starts from "```json", and ends with "```". The list items are indexe numbers of chunks most related to answer the query. Do not return unrelated or too many. Return [] if no chunk related.'
+        output_format_prompt = 'Your 1st output should be query analysis and user intention recognition. Your 2nd output should be scanning chunk by chunk based on above analysis. Your 3rd output should be a json list ([]), starts from "```json", and ends with "```": The list items are indexes of chunks relevant to the query; Do not return non-relevant or too many; Return [] if no relevant chunk.'
         prompt = (
             f"Here are {chunk_info_prompt}. {description_prompt} {task_prompt}\n"
             f"{query_prompt}\n"
@@ -38,10 +38,12 @@ class SourceIndexAgent:
         chunks = self.chunker.md_to_chunks_list(markdown_path=filepath)
 
         indexes_and_chunks = []
-        chunk_num = 31
+        chunk_num = 10
         for offset in range(0, len(chunks), chunk_num):
             chunks_part = chunks[offset : offset + chunk_num]
-
+            logger.note(
+                f"> Scanning chunks: [{offset+1}-{offset+len(chunks_part)}]/{len(chunks)}"
+            )
             prompt_with_context = self.construct_prompt_with_context(
                 query=prompt, chunks=chunks_part, offset=offset, total_count=len(chunks)
             )
@@ -61,11 +63,21 @@ class SourceIndexAgent:
                 indexes_and_chunks.extend(indexes_and_chunks_part)
 
         indexes_and_chunks = sorted(indexes_and_chunks, key=lambda x: x["index"])
+        related_indexes = [item["index"] for item in indexes_and_chunks]
+        logger.success(f"Related Indexes: {related_indexes}")
         for item in indexes_and_chunks:
             logger.note(f"=== Chunk {item['index']} ===")
             logger.line(f"{item['chunk']}")
 
         logger.success(f"Related chunks {len(indexes_and_chunks)}/{len(chunks)}")
+        indexed_chunks_tokens = sum(
+            [count_tokens(item["chunk"]) for item in indexes_and_chunks]
+        )
+        total_chunks_tokens = sum([count_tokens(chunk) for chunk in chunks])
+        compression_ratio = indexed_chunks_tokens / total_chunks_tokens
+        logger.success(
+            f"Compress Ratio: {indexed_chunks_tokens}/{total_chunks_tokens} = {compression_ratio:.2}"
+        )
 
         return indexes_and_chunks
 
@@ -75,10 +87,11 @@ if __name__ == "__main__":
     markdown_root = Path(__file__).parents[1] / "data" / "wikipedia"
     markdown_path = list(markdown_root.glob("*.md"))[0]
     # query = "From what references can I know more about Three Laws of Robotics?"
-    query = "level 2 subheadings of toc in this doc"
-    # query = "summarize this article"
+    query = "list all level-2 headers"
+    # query = "summarize this doc"
     # query = "who is the partner of Olivaw?"
-    # query = "3th reference of this article"
+    # query = "list the references related to the naked sun"
+    # query = "list partners of olivaw"
     result = agent.chat(query, markdown_path)
 
     # python -m agents.source_index_agent
